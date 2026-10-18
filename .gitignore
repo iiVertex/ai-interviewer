@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+web/dist/
+web/public/mediapipe/
+
+# Env & secrets
+.env
+.env.local
+web/.env
+web/.env.local
+
+# Local session dumps used for threshold tuning
+recordings/
+
+# Vercel
+.vercel/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
