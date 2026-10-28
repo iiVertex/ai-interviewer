@@ -40,39 +40,65 @@ const STEPS = [
   ['Read your report', 'Scores per category, a timeline of flagged moments with screenshots, and the three fixes that matter most.'],
 ]
 
+const PRIVACY = [
+  ['Your video stays in your browser', 'Face and posture analysis runs on your device while you record. No AI ever sees your video.'],
+  ['Only text reaches the AI', 'Each answer is transcribed, then the audio is discarded. Only the transcripts are sent for feedback.'],
+  ['Recordings are private', 'Your answers are saved so you can replay them. Nobody else can see them.'],
+  ['Delete anything, any time', 'Deleting a session removes its recordings, transcripts, scores and screenshots.'],
+]
+
 const stagger = (i: number) => ({ '--i': i }) as CSSProperties
 
-/** A blurred, chromatic portrait inside a face-tracking ring: the camera's view of you. */
+/** One two-minute answer as a waveform, with the moments a report would flag pinned to it. */
+const WAVE_BARS = 112
+const PAUSE = [52, 58] // a silent stretch, in bar indexes
+// `raised` lifts a label above its neighbour; `wide` labels are hidden on phones
+const MARKS = [
+  { at: 18, time: '00:21', label: 'Um ×2', color: 'var(--cat-delivery)', raised: false, wide: false },
+  { at: 71, time: '01:16', label: 'Gaze drifted', color: 'var(--cat-eye_contact)', raised: false, wide: true },
+  { at: 90, time: '01:37', label: 'Strong example', color: 'var(--cat-highlight)', raised: true, wide: false },
+]
+const BARS = Array.from({ length: WAVE_BARS }, (_, i) => {
+  if (i >= PAUSE[0] && i <= PAUSE[1]) return 0.04
+  // Phrases swell and fade, with syllable-scale jitter on top
+  const phrase = 0.45 + 0.55 * Math.abs(Math.sin(i * 0.11 + 0.6))
+  const syllable = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.37))
+  return Math.max(0.08, phrase * syllable)
+})
+const markAt = (i: number) => MARKS.find((m) => Math.abs((i / WAVE_BARS) * 100 - m.at) < 2.2)
+
 function HeroVisual() {
   return (
     <div className="hero-visual" aria-hidden="true">
       <span className="hero-visual__glow" />
       <span className="hero-visual__streak" />
-      <svg className="hero-visual__figure" viewBox="0 0 600 600" preserveAspectRatio="xMidYMax meet">
-        <defs>
-          <filter id="hv-soft" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="16" />
-          </filter>
-          <filter id="hv-softer" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="26" />
-          </filter>
-          <g id="hv-bust">
-            <ellipse cx="300" cy="235" rx="92" ry="114" />
-            <path d="M262 330h76l10 70h-96Z" />
-            <path d="M110 640c10-150 90-232 190-232s180 82 190 232Z" />
-          </g>
-        </defs>
-        <use href="#hv-bust" className="hero-visual__fringe hero-visual__fringe--warm" filter="url(#hv-softer)" x="-16" />
-        <use href="#hv-bust" className="hero-visual__fringe hero-visual__fringe--cool" filter="url(#hv-softer)" x="18" />
-        <use href="#hv-bust" className="hero-visual__bust" filter="url(#hv-soft)" />
-        <g className="hero-visual__ring">
-          <circle cx="300" cy="235" r="168" strokeDasharray="1 7" />
-          <path d="M300 59v14M300 397v14M124 235h14M462 235h14" />
-        </g>
-        <g className="hero-visual__marks">
-          <path d="M256 222h12M262 216v12M332 222h12M338 216v12M294 292h12M300 286v12" />
-        </g>
-      </svg>
+      <div className="hero-wave">
+        <div className="hero-wave__bars">
+          {BARS.map((h, i) => (
+            <span
+              key={i}
+              className="hero-wave__bar"
+              style={{ '--h': h, '--i': i, '--c': markAt(i)?.color } as CSSProperties}
+            />
+          ))}
+        </div>
+        {MARKS.map((m) => (
+          <span
+            key={m.time}
+            className={['hero-wave__mark', m.raised && 'hero-wave__mark--raised', m.wide && 'hero-wave__mark--wide', m.at > 80 && 'hero-wave__mark--end'].filter(Boolean).join(' ')}
+            style={{ '--x': m.at, '--c': m.color } as CSSProperties}
+          >
+            <span className="hero-wave__label">
+              <span className="hero-wave__time">{m.time}</span>
+              {m.label}
+            </span>
+          </span>
+        ))}
+        <span className="hero-wave__sweep"><span className="hero-wave__playhead" /></span>
+        <div className="hero-wave__axis">
+          {['00:00', '00:30', '01:00', '01:30', '02:00'].map((t) => <span key={t}>{t}</span>)}
+        </div>
+      </div>
     </div>
   )
 }
@@ -257,14 +283,26 @@ export default function Landing() {
         </ol>
       </section>
 
+      <section className="privacy" id="privacy" aria-labelledby="privacy-title">
+        <div className="privacy__head">
+          <p className="eyebrow">Privacy</p>
+          <h2 id="privacy-title">Practice in private. Your camera feed never reaches an AI.</h2>
+        </div>
+        <ul className="privacy__list">
+          {PRIVACY.map(([title, body]) => (
+            <li key={title}>
+              <strong>{title}</strong>
+              <span className="muted">{body}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section className="start" id="start">
         <div className="start__text">
           <p className="eyebrow">Start</p>
           <h2>Your first session is a sign-in away.</h2>
-          <p className="muted" id="privacy">
-            Face and posture analysis runs in your browser, and no AI ever sees your video. Your recordings are stored
-            privately so you can replay them, and deleting a session deletes everything saved for it.
-          </p>
+          <p className="muted">Five questions, about fifteen minutes, and a report you can come back to.</p>
         </div>
         <AuthForm />
       </section>
