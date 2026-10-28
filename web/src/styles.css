@@ -88,6 +88,8 @@ html {
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }
+/* Lenis drives the scroll itself; native smoothing on top would fight it */
+html.lenis { scroll-behavior: auto; }
 body {
   margin: 0;
   background: var(--bg);
@@ -267,23 +269,31 @@ img { max-width: 100%; display: block; }
 /* ---------- Landing ---------- */
 .site { overflow-x: clip; background: var(--grain), var(--bg); }
 .site-top { position: relative; min-height: min(100svh, 980px); display: flex; flex-direction: column; isolation: isolate; }
+/* Portrait screens are taller than the hero needs; filling them would leave a void above the title */
+@media (max-aspect-ratio: 1/1) { .site-top { min-height: 0; } }
 .topbar--site { position: relative; background: transparent; border-bottom: 0; }
 
-.hero { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 var(--gutter) clamp(2rem, 6vw, 5rem); }
+/* The wave sits in the flow between the bar and the type, so the two can never collide. */
+.hero {
+  flex: 1; display: flex; flex-direction: column; justify-content: flex-end;
+  container-type: inline-size; padding: clamp(2rem, 6svh, 4rem) var(--gutter) clamp(1.5rem, 4vw, 3.5rem);
+}
+/* Title on the left; caption and button stack on the right, flush with the gutter, the button's foot on the title's baseline */
 .hero__type {
-  container-type: inline-size;
-  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'cta caption' 'title title';
-  align-items: end;
+  --side: 13rem; --gap: 3rem;
+  display: grid; grid-template-columns: 1fr var(--side); grid-template-areas: 'title caption' 'title cta';
+  row-gap: 1.25rem; column-gap: var(--gap); align-items: end;
 }
-.hero__title, .hero__cta-wrap {
-  font-family: var(--mono); font-weight: 400; font-size: min(100cqi / 8.3, 13rem); letter-spacing: -0.03em;
+/* Sized to the room the column leaves, and capped by height so short laptop screens keep the hero above the fold */
+.hero__title {
+  grid-area: title; margin: 0; line-height: 0.82; text-transform: uppercase; white-space: nowrap;
+  font-family: var(--mono); font-weight: 400; letter-spacing: -0.03em;
+  font-size: min((100cqi - var(--side) - var(--gap)) / 8.3, 13rem, 18svh);
 }
-.hero__title { grid-area: title; margin: 0; line-height: 0.82; text-transform: uppercase; white-space: nowrap; }
-/* The square sits over the second word: "MOCK " is five monospaced cells. */
-.hero__cta-wrap { grid-area: cta; padding-inline-start: calc(5 * (1ch - 0.03em)); line-height: 1; margin-bottom: 0.08em; }
+.hero__cta-wrap { grid-area: cta; justify-self: end; }
 .hero__cta {
   display: grid; place-items: center; text-align: center;
-  width: clamp(6.5rem, 10cqi, 9rem); aspect-ratio: 1; padding: 0.75rem;
+  width: clamp(6rem, 9cqi, 8rem); aspect-ratio: 1; padding: 0.75rem;
   font-family: var(--font); font-size: 1rem; letter-spacing: 0; line-height: 1.2;
   background: var(--accent); color: var(--accent-contrast); text-decoration: none;
   transition-property: scale, background-color; transition-duration: 150ms; transition-timing-function: ease-out;
@@ -291,15 +301,17 @@ img { max-width: 100%; display: block; }
 }
 .hero__cta:active { scale: 0.96; }
 @media (hover: hover) { .hero__cta:hover { background: var(--accent-hover); } }
-.hero__caption { grid-area: caption; margin: 0 0 1.25rem; font-size: clamp(0.95rem, 1.4vw, 1.15rem); line-height: 1.2; }
-@media (max-width: 640px) {
-  .hero__type { grid-template-columns: 1fr; grid-template-areas: 'title' 'caption' 'cta'; gap: 1.5rem; }
+.hero__caption { grid-area: caption; margin: 0; text-align: right; font-size: clamp(1rem, 1.6vw, 1.3rem); line-height: 1.2; }
+/* Tablets: one line would be too small beside the column, so the title takes two */
+@container (max-width: 900px) {
+  .hero__type { --gap: 2rem; }
+  .hero__title { white-space: normal; font-size: calc((100cqi - var(--side) - var(--gap)) / 5.4); }
 }
+/* Phones: no room for a column, so caption and button share a row under the title */
 @container (max-width: 640px) {
-  .hero__title, .hero__cta-wrap { font-size: calc(100cqi / 5.5); }
-  .hero__title { white-space: normal; text-wrap: balance; }
-  .hero__cta-wrap { padding-inline-start: 0; font-size: 1rem; }
-  .hero__caption { margin: 0; }
+  .hero__type { grid-template-columns: 1fr auto; grid-template-areas: 'title title' 'caption cta'; column-gap: 1.5rem; }
+  .hero__title { font-size: calc(100cqi / 5.5); margin-bottom: 0.5rem; }
+  .hero__caption { text-align: left; }
 }
 
 /* A waveform of one answer, with the moments a report flags pinned to it */
@@ -314,7 +326,11 @@ img { max-width: 100%; display: block; }
   background: radial-gradient(closest-side, var(--iris-lilac), transparent); filter: blur(30px); opacity: 0.8; mix-blend-mode: var(--blend);
 }
 
-.hero-wave { position: absolute; left: var(--gutter); right: var(--gutter); top: calc(var(--topbar-h) + 13%); height: clamp(110px, 22%, 230px); }
+/* Top margin is room for the raised labels; bottom margin is room for the axis */
+.hero-wave {
+  position: relative; flex: none; margin: 6rem var(--gutter) 2.5rem; height: clamp(90px, 20svh, 230px);
+  color: var(--text); animation: fade-in 600ms ease-out both;
+}
 .hero-wave__bars { position: absolute; inset: 0; display: flex; align-items: center; gap: clamp(1px, 0.3vw, 4px); }
 .hero-wave__bar { flex: 1; height: calc(var(--h) * 100%); background: var(--c, var(--text)); opacity: 0.88; }
 .hero-wave__bar[style*='--c'] { opacity: 1; }
@@ -350,13 +366,8 @@ img { max-width: 100%; display: block; }
 @keyframes glow-drift { to { translate: -12% 10%; scale: 1.15; } }
 @keyframes breathe { from { scale: 1 0.7; } }
 @keyframes sweep { from { translate: 0 0; } to { translate: 100% 0; } }
-/* On phones the type can't sit on the wave and stay legible, so give the wave its own band. */
 @media (max-width: 640px) {
-  .site-top { min-height: 0; }
-  .hero-visual { bottom: auto; height: 360px; }
-  .hero-wave { top: 172px; height: 120px; }
   .hero-wave__mark--wide .hero-wave__label { display: none; }
-  .hero { padding-top: 350px; }
 }
 
 .intro {

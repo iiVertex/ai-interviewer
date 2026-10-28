@@ -1,5 +1,7 @@
-import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import Lenis from 'lenis'
+import 'lenis/dist/lenis.css'
 import { BrandMark } from '../components/BrandMark'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../lib/auth'
@@ -67,37 +69,42 @@ const BARS = Array.from({ length: WAVE_BARS }, (_, i) => {
 })
 const markAt = (i: number) => MARKS.find((m) => Math.abs((i / WAVE_BARS) * 100 - m.at) < 2.2)
 
-function HeroVisual() {
+function HeroBackdrop() {
   return (
     <div className="hero-visual" aria-hidden="true">
       <span className="hero-visual__glow" />
       <span className="hero-visual__streak" />
-      <div className="hero-wave">
-        <div className="hero-wave__bars">
-          {BARS.map((h, i) => (
-            <span
-              key={i}
-              className="hero-wave__bar"
-              style={{ '--h': h, '--i': i, '--c': markAt(i)?.color } as CSSProperties}
-            />
-          ))}
-        </div>
-        {MARKS.map((m) => (
+    </div>
+  )
+}
+
+function HeroWave() {
+  return (
+    <div className="hero-wave" aria-hidden="true">
+      <div className="hero-wave__bars">
+        {BARS.map((h, i) => (
           <span
-            key={m.time}
-            className={['hero-wave__mark', m.raised && 'hero-wave__mark--raised', m.wide && 'hero-wave__mark--wide', m.at > 80 && 'hero-wave__mark--end'].filter(Boolean).join(' ')}
-            style={{ '--x': m.at, '--c': m.color } as CSSProperties}
-          >
-            <span className="hero-wave__label">
-              <span className="hero-wave__time">{m.time}</span>
-              {m.label}
-            </span>
-          </span>
+            key={i}
+            className="hero-wave__bar"
+            style={{ '--h': h, '--i': i, '--c': markAt(i)?.color } as CSSProperties}
+          />
         ))}
-        <span className="hero-wave__sweep"><span className="hero-wave__playhead" /></span>
-        <div className="hero-wave__axis">
-          {['00:00', '00:30', '01:00', '01:30', '02:00'].map((t) => <span key={t}>{t}</span>)}
-        </div>
+      </div>
+      {MARKS.map((m) => (
+        <span
+          key={m.time}
+          className={['hero-wave__mark', m.raised && 'hero-wave__mark--raised', m.wide && 'hero-wave__mark--wide', m.at > 80 && 'hero-wave__mark--end'].filter(Boolean).join(' ')}
+          style={{ '--x': m.at, '--c': m.color } as CSSProperties}
+        >
+          <span className="hero-wave__label">
+            <span className="hero-wave__time">{m.time}</span>
+            {m.label}
+          </span>
+        </span>
+      ))}
+      <span className="hero-wave__sweep"><span className="hero-wave__playhead" /></span>
+      <div className="hero-wave__axis">
+        {['00:00', '00:30', '01:00', '01:30', '02:00'].map((t) => <span key={t}>{t}</span>)}
       </div>
     </div>
   )
@@ -175,10 +182,17 @@ function AuthForm() {
 export default function Landing() {
   const focusForm = () => document.getElementById('email')?.focus({ preventScroll: true })
 
+  // Eased wheel scrolling and section links on the landing page only; touch keeps native scrolling
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const lenis = new Lenis({ autoRaf: true, anchors: true })
+    return () => lenis.destroy()
+  }, [])
+
   return (
     <div className="site">
       <div className="site-top">
-        <HeroVisual />
+        <HeroBackdrop />
         <header className="topbar topbar--site">
           <Link to="/" className="brand">
             <BrandMark />
@@ -194,6 +208,8 @@ export default function Landing() {
             <a href="#start" className="topbar__cta" onClick={focusForm}>Sign in</a>
           </div>
         </header>
+
+        <HeroWave />
 
         <section className="hero">
           <div className="hero__type">
