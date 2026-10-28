@@ -1,7 +1,7 @@
 export type Speech = { done: Promise<void>; stop: () => void }
 
 /**
- * Plays the interviewer's question and reports its loudness so the orb can pulse.
+ * Plays the interviewer's question and reports its loudness so the waveform can follow it.
  * Falls back to the browser's built-in voice if the audio can't be fetched or decoded.
  */
 export function speak(ctx: AudioContext, url: string | null, text: string, onLevel: (level: number) => void): Speech {

@@ -1,15 +1,11 @@
 import { useEffect, useRef, type RefObject } from 'react'
 
-export type OrbState = 'idle' | 'speaking' | 'thinking' | 'listening'
+export type WaveState = 'idle' | 'speaking' | 'thinking' | 'listening'
 
-type Wave = { born: number; amp: number; lobes: number; phase: number; strength: number }
-
-const TAU = Math.PI * 2
-const WAVE_MS = 1900 // how long a wave takes to travel from the ring to the edge
-const RING = 0.2 // ring radius as a share of the canvas width
-const EDGE = 0.48
-
-const easeOut = (t: number) => 1 - (1 - t) ** 3
+const BAR = 4 // bar width, px
+const GAP = 3
+const SAMPLE_MS = 55 // a new bar enters on the right this often
+const MIN_H = 3 // silence still shows as a row of dots
 
 function readColors(el: Element) {
   const css = getComputedStyle(el)
@@ -17,25 +13,12 @@ function readColors(el: Element) {
   return { text: v('--text'), accent: v('--accent'), iris: ['--iris-amber', '--iris-rose', '--iris-violet', '--iris-sky'].map(v) }
 }
 
-/** A circle, slightly wavy for a live wave, at radius r. */
-function ring(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, amp = 0, lobes = 0, phase = 0) {
-  ctx.beginPath()
-  const steps = amp > 0.05 ? 120 : 64
-  for (let i = 0; i <= steps; i++) {
-    const a = (i / steps) * TAU
-    const rr = r + amp * Math.sin(lobes * a + phase)
-    if (i === 0) ctx.moveTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a))
-    else ctx.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a))
-  }
-  ctx.stroke()
-}
-
 /**
- * The interviewer: a hollow ring that sends out sound waves while someone is talking.
- * Iridescent when the interviewer speaks, accent-colored when it's listening to you,
- * a slow pulse while you think. Waves follow whatever level is in `levelRef` (0..1).
+ * The interviewer: a live audio waveform. Bars scroll in from the right, mirrored around the
+ * middle, following whatever level is in `levelRef` (0..1). Iridescent while the interviewer
+ * speaks, accent-colored while it listens to you, a slow ripple while you think.
  */
-export function VoiceOrb({ levelRef, state }: { levelRef: RefObject<number>; state: OrbState }) {
+export function VoiceWave({ levelRef, state }: { levelRef: RefObject<number>; state: WaveState }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef(state)
   useEffect(() => {
@@ -47,93 +30,77 @@ export function VoiceOrb({ levelRef, state }: { levelRef: RefObject<number>; sta
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const waves: Wave[] = []
     let colors = readColors(canvas)
-    let size = 0
+    let w = 0
+    let h = 0
+    let bars: number[] = []
     let raf = 0
     let frame = 0
     let smooth = 0
-    let pending = 0
-    let last = performance.now()
+    let lastSample = performance.now()
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
-      size = canvas.clientWidth
-      canvas.width = Math.round(size * dpr)
-      canvas.height = Math.round(size * dpr)
+      w = canvas.clientWidth
+      h = canvas.clientHeight
+      canvas.width = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const n = Math.ceil(w / (BAR + GAP)) + 1
+      bars = Array.from({ length: n }, (_, i) => bars[bars.length - n + i] ?? 0)
     }
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
     resize()
 
+    const sample = (now: number, s: WaveState) => {
+      if (s === 'thinking') return 0.05 + 0.05 * (1 + Math.sin(now / 260)) // a soft travelling ripple
+      if (s === 'idle') return 0
+      // Real speech is spiky; a little jitter keeps the smoothed level from looking like a hill.
+      return Math.min(1, smooth * 1.4) ** 0.8 * (0.55 + Math.random() * 0.45)
+    }
+
     const draw = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000)
-      last = now
-      smooth += ((levelRef.current ?? 0) - smooth) * 0.18
+      smooth += ((levelRef.current ?? 0) - smooth) * 0.3
       if (frame++ % 30 === 0) colors = readColors(canvas) // follows theme changes
       const s = stateRef.current
-      const c = size / 2
-      const r0 = size * RING
-      const r1 = size * EDGE
+      const step = BAR + GAP
+      const mid = h / 2
 
-      // Louder speech sends waves out faster and stronger; thinking keeps a slow, faint pulse.
-      const talking = (s === 'speaking' || s === 'listening') && smooth > 0.035
-      const rate = s === 'thinking' ? 0.55 : talking ? 1.1 + smooth * 4.5 : 0
-      pending += dt * rate
-      while (pending >= 1) {
-        pending -= 1
-        waves.push({
-          born: now,
-          amp: s === 'thinking' ? 0 : 1.5 + smooth * size * 0.035,
-          lobes: 3 + Math.floor(Math.random() * 4),
-          phase: Math.random() * TAU,
-          strength: s === 'thinking' ? 0.22 : 0.3 + smooth * 0.7,
-        })
+      let shift = 0
+      if (!reduce) {
+        while (now - lastSample >= SAMPLE_MS) {
+          lastSample += SAMPLE_MS
+          bars.shift()
+          bars.push(sample(lastSample, s))
+        }
+        shift = ((now - lastSample) / SAMPLE_MS) * step // glide between samples instead of ticking
       }
 
-      ctx.clearRect(0, 0, size, size)
+      ctx.clearRect(0, 0, w, h)
       if (s === 'speaking') {
-        const g = ctx.createConicGradient(now / 2600, c, c)
-        colors.iris.forEach((col, i) => g.addColorStop(i / colors.iris.length, col))
-        g.addColorStop(1, colors.iris[0])
-        ctx.strokeStyle = g
+        const g = ctx.createLinearGradient(0, 0, w, 0)
+        colors.iris.forEach((col, i) => g.addColorStop(i / (colors.iris.length - 1), col))
+        ctx.fillStyle = g
       } else {
-        ctx.strokeStyle = s === 'listening' ? colors.accent : colors.text
-      }
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-
-      if (reduce) {
-        // No travelling waves: three still rings brighten with the level instead.
-        for (let i = 1; i <= 3; i++) {
-          ctx.globalAlpha = (talking ? 0.15 + smooth * 0.6 : 0.12) * (1 - (i - 1) * 0.28)
-          ctx.lineWidth = 1.25
-          ring(ctx, c, c, r0 + ((r1 - r0) * i) / 3.4)
-        }
-        waves.length = 0
-      } else {
-        for (let i = waves.length - 1; i >= 0; i--) {
-          const w = waves[i]
-          const t = (now - w.born) / WAVE_MS
-          if (t >= 1) {
-            waves.splice(i, 1)
-            continue
-          }
-          ctx.globalAlpha = w.strength * (1 - t) ** 1.6
-          ctx.lineWidth = 0.75 + 1.5 * (1 - t)
-          // The wave starts at the ring and smooths out as it spreads.
-          ring(ctx, c, c, r0 + (r1 - r0) * easeOut(t), w.amp * (1 - t), w.lobes, w.phase + t * 3)
-        }
+        ctx.fillStyle = s === 'listening' ? colors.accent : colors.text
       }
 
-      // The ring itself: hollow, a touch thicker and wider while there's sound.
-      const breathe = s === 'thinking' && !reduce ? Math.sin(now / 520) * 0.025 : 0
-      ctx.globalAlpha = s === 'idle' ? 0.5 : 0.95
-      ctx.lineWidth = 2 + smooth * 2.5
-      ring(ctx, c, c, r0 * (1 + smooth * 0.07 + breathe))
+      const n = bars.length
+      for (let i = 0; i < n; i++) {
+        const x = i * step - shift
+        if (x + BAR < 0 || x > w) continue
+        // Reduced motion: bars stay put and one bell-shaped envelope follows the level.
+        const amp = reduce ? sample(now, s) * Math.exp(-(((i / (n - 1)) * 2 - 1) ** 2) * 3) : bars[i]
+        const bh = Math.max(MIN_H, amp * (h - 4))
+        // Fade both ends so the wave reads as passing through, not boxed in.
+        const edge = Math.min(x, w - x - BAR) / (w * 0.16)
+        ctx.globalAlpha = Math.max(0, Math.min(1, edge)) * (s === 'thinking' || s === 'idle' ? 0.4 : 1)
+        ctx.beginPath()
+        ctx.roundRect(x, mid - bh / 2, BAR, bh, BAR / 2)
+        ctx.fill()
+      }
       ctx.globalAlpha = 1
-
       raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
@@ -144,8 +111,8 @@ export function VoiceOrb({ levelRef, state }: { levelRef: RefObject<number>; sta
   }, [levelRef])
 
   return (
-    <div className={`orb orb--${state}`} aria-hidden="true">
-      <canvas ref={canvasRef} className="orb__canvas" />
+    <div className={`wave wave--${state}`} aria-hidden="true">
+      <canvas ref={canvasRef} className="wave__canvas" />
     </div>
   )
 }

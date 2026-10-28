@@ -4,7 +4,7 @@ import { LevelMeter } from '../audio/level'
 import { speak, type Speech } from '../audio/voice'
 import { toWav } from '../audio/wav'
 import { BrandMark } from '../components/BrandMark'
-import { VoiceOrb, type OrbState } from '../components/VoiceOrb'
+import { VoiceWave, type WaveState } from '../components/VoiceWave'
 import { api } from '../lib/api'
 import { formatTime } from '../lib/format'
 import { useAuth } from '../lib/auth'
@@ -262,7 +262,7 @@ export default function Interview() {
     const signals = new SignalRecorder(video, calibrationRef.current, started)
     const off = loopRef.current!.subscribe((tick) => {
       signals.push(tick)
-      levelRef.current = Math.min(1, tick.level * 6) // the orb listens to you
+      levelRef.current = Math.min(1, tick.level * 6) // the waveform follows your voice
     })
 
     let finished = false
@@ -380,7 +380,7 @@ export default function Interview() {
 
   // --- Render -----------------------------------------------------------------------
   const qs = questions ?? []
-  const orbState: OrbState =
+  const waveState: WaveState =
     phase !== 'interview' ? 'idle' : stage === 'speaking' ? 'speaking' : stage === 'answering' ? 'listening' : 'thinking'
   const allGood = checks.face && checks.centered && checks.distance === 'ok' && checks.light
   const talkTime = recap.reduce((sum, r) => sum + (r.answered ? r.seconds : 0), 0)
@@ -408,7 +408,7 @@ export default function Interview() {
       )}
 
       <div className={`room__stage${phase === 'setup' ? ' room__stage--setup' : ''}`}>
-        {phase === 'interview' && <VoiceOrb levelRef={levelRef} state={orbState} />}
+        {phase === 'interview' && <VoiceWave levelRef={levelRef} state={waveState} />}
         <div className={`selfview selfview--${phase === 'interview' ? 'small' : 'large'}`}>
           <video ref={videoRef} muted playsInline className="mirror" />
           {phase === 'calibrating' && (

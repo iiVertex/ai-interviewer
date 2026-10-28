@@ -602,9 +602,9 @@ img { max-width: 100%; display: block; }
 .calibrate-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.3); }
 .calibrate-count { font-family: var(--mono); font-size: 5rem; font-weight: 400; color: #fff; font-variant-numeric: tabular-nums; }
 
-/* Voice orb: a hollow ring that sends out sound waves (drawn on the canvas) */
-.orb { width: clamp(240px, 36vw, 400px); aspect-ratio: 1; position: relative; }
-.orb__canvas { display: block; width: 100%; height: 100%; }
+/* Voice waveform (drawn on the canvas) */
+.wave { width: min(680px, 100%); height: clamp(110px, 15vw, 170px); }
+.wave__canvas { display: block; width: 100%; height: 100%; }
 
 /* Wrap-up: the camera is off by now, so a recap takes its place beside the progress */
 .room--processing .room__stage { display: none; }
