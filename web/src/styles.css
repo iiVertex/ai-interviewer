@@ -602,27 +602,9 @@ img { max-width: 100%; display: block; }
 .calibrate-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.3); }
 .calibrate-count { font-family: var(--mono); font-size: 5rem; font-weight: 400; color: #fff; font-variant-numeric: tabular-nums; }
 
-/* Voice orb */
-.orb { width: clamp(160px, 26vw, 260px); aspect-ratio: 1; display: grid; place-items: center; position: relative; }
-.orb::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--text) 35%, transparent); }
-.orb__core {
-  --level: 0;
-  width: 66%; aspect-ratio: 1; border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, #f4f4f2, #9a9a98 32%, #141414 72%);
-  box-shadow:
-    calc(-6px - var(--level) * 10px) 0 calc(28px + var(--level) * 50px) color-mix(in srgb, #ff3d7a 55%, transparent),
-    calc(6px + var(--level) * 10px) 0 calc(28px + var(--level) * 50px) color-mix(in srgb, #6fd6ff 50%, transparent);
-  will-change: transform;
-}
-.orb--listening .orb__core {
-  background: radial-gradient(circle at 34% 30%, #ffd1de, var(--accent) 50%, #5c0a26 85%);
-  box-shadow: 0 0 calc(24px + var(--level) * 60px) color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.orb--thinking .orb__core { filter: saturate(0.4); }
-@media (prefers-reduced-motion: no-preference) {
-  .orb--thinking .orb__core { animation: breathe 3.2s ease-in-out infinite; }
-}
-@keyframes breathe { 50% { scale: 1.06; } }
+/* Voice orb: a hollow ring that sends out sound waves (drawn on the canvas) */
+.orb { width: clamp(240px, 36vw, 400px); aspect-ratio: 1; position: relative; }
+.orb__canvas { display: block; width: 100%; height: 100%; }
 
 /* Wrap-up: the camera is off by now, so a recap takes its place beside the progress */
 .room--processing .room__stage { display: none; }
