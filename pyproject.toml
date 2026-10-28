@@ -3,6 +3,16 @@ name = "interview-coach"
 version = "0.1.0"
 description = "AI mock interview and communication coach"
 requires-python = ">=3.12"
+# Vercel installs from here, not requirements.txt, whenever this file exists. Keep the two in sync.
+dependencies = [
+    "fastapi==0.143.3",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "numpy>=2.2",
+    "openai==3.33.0",
+    "anthropic==1.15.0",
+    "supabase==2.33.0",
+]
 
 # Vercel deploys the FastAPI app found here as a single function.
 [tool.vercel]
