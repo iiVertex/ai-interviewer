@@ -50,6 +50,10 @@ class Query:
         self.filters.append(lambda r: r.get(col) == value)
         return self
 
+    def in_(self, col, values):
+        self.filters.append(lambda r: r.get(col) in values)
+        return self
+
     def gte(self, col, value):
         self.filters.append(lambda r: str(r.get(col)) >= value)
         return self
@@ -64,7 +68,7 @@ class Query:
 
     def execute(self):
         rows = self.db.tables.setdefault(self.table, [])
-        keys = {"sessions": ("id",), "profiles": ("id",), "session_answers": ("session_id", "idx")}[self.table]
+        keys = {"sessions": ("id",), "profiles": ("id",), "session_answers": ("session_id", "idx"), "saved_questions": ("id",)}[self.table]
         match = [r for r in rows if all(f(r) for f in self.filters)]
         if self.op == "select":
             if self._order:
@@ -225,3 +229,52 @@ def test_scoring_failure_still_finishes(env, monkeypatch):
     res = client.post(f"/api/sessions/{sid}/score").json()
     assert res["content_error"] == "proxy down"
     assert db.tables["sessions"][0]["status"] == "ready"
+
+
+def test_session_from_practice_bank(env):
+    client, db, _ = env
+    client.post("/api/consent")
+    db.tables["saved_questions"] = [
+        {"id": "q1", "user_id": "user-1", "text": "Tell me about a conflict.", "mode": "job", "role": "Analyst"},
+        {"id": "q2", "user_id": "user-1", "text": "Why this company?", "mode": "job", "role": None},
+        {"id": "q3", "user_id": "someone-else", "text": "Not yours.", "mode": "job", "role": None},
+    ]
+    res = client.post("/api/sessions", json={"mode": "job", "saved_ids": ["q2", "q1"]}).json()
+    assert [q["text"] for q in res["questions"]] == ["Why this company?", "Tell me about a conflict."]
+    assert db.tables["sessions"][0]["config"] == {"source": "bank", "role": "Analyst"}
+    assert client.post("/api/sessions", json={"mode": "job", "saved_ids": ["q3"]}).status_code == 404
+
+
+def test_skipped_answer_is_not_transcribed(env, monkeypatch):
+    client, db, _ = env
+    client.post("/api/consent")
+    sid = client.post("/api/sessions", json={"mode": "communication"}).json()["id"]
+
+    def never(*_a):
+        raise AssertionError("a half-second clip should not reach Whisper")
+
+    monkeypatch.setattr(main.ai, "transcribe", never)
+    res = client.post(f"/api/sessions/{sid}/answers/0", files={
+        "audio": ("a.wav", b"x" * 16000, "audio/wav"),
+        "signals": ("s.json", json.dumps(make_signals(duration=0.5)), "application/json"),
+    })
+    assert res.status_code == 200, res.text
+    assert db.tables["session_answers"][0]["transcript"]["text"] == ""
+
+
+def test_hallucinated_transcripts_are_caught():
+    looped = {"words": [{"word": w} for w in "You know, I mean,".split() * 30]}
+    assert not main.ai.plausible(looped, 60.0)  # the same four words, a hundred times
+    assert not main.ai.plausible({"words": [{"word": "hi"}] * 15}, 0.6)  # too many words for the clip
+    assert main.ai.plausible({"words": make_words()}, 60.0)
+
+
+def test_skipped_answers_stay_out_of_the_claude_call(monkeypatch):
+    from server import content
+
+    def no_call(*_a, **_k):
+        raise AssertionError("nothing to review, so no Claude call")
+
+    monkeypatch.setattr(content, "_call_structured", no_call)
+    report = content.score_content("job", {}, [{"idx": 0, "metrics": {"word_count": 2}}], [])
+    assert report["answers"][0]["score"] == 0 and report["top_fixes"] == []

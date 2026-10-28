@@ -157,14 +157,49 @@ def _call_structured(model: str, system: str, user: str, schema: type[BaseModel]
     return resp.parsed_output
 
 
+MIN_WORDS = 5  # fewer real words than this is a skipped question, not an answer
+
+
+def _answered(a: dict) -> bool:
+    return ((a.get("metrics") or {}).get("word_count") or 0) >= MIN_WORDS
+
+
+def _skipped_feedback(mode: str, idx: int) -> dict:
+    """Feedback for a question with no real answer, written locally rather than paying Claude to say so."""
+    return {
+        "index": idx,
+        "score": 0,
+        "rubric": [{"criterion": c, "score": 1, "comment": "No answer was given."} for c in RUBRICS[mode]],
+        "worked": [],
+        "missing": ["No spoken answer was recorded for this question."],
+        "stronger_answer": "",
+    }
+
+
 def score_content(mode: str, config: dict, answers: list[dict], flags: list[dict]) -> dict:
-    system, user = build_scoring_prompt(mode, config, answers, flags)
+    spoken = [a for a in answers if _answered(a)]
+    skipped = {a["idx"]: _skipped_feedback(mode, a["idx"]) for a in answers if not _answered(a)}
+    if not spoken:
+        return {
+            "answers": list(skipped.values()),
+            "summary": "You didn't give a spoken answer to any question this time, so there's nothing to review yet.",
+            "top_fixes": [],
+        }
+
+    spoken_idx = {a["idx"] for a in spoken}
+    system, user = build_scoring_prompt(mode, config, spoken, [f for f in flags if f.get("answer_idx") in spoken_idx])
+    if skipped:
+        user += f"\nThe user skipped {len(skipped)} of the {len(answers)} questions; those are not shown."
+    # Low effort skips extended thinking, which cut about a third off the wait in testing.
     report: ContentReport = _call_structured(
-        get_settings().content_model, system, user, ContentReport, effort="medium", max_tokens=16000
+        get_settings().content_model, system, user, ContentReport, effort="low", max_tokens=16000
     )
     by_index = {a.index: a for a in report.answers}
     feedback = []
     for a in answers:
+        if a["idx"] in skipped:
+            feedback.append(skipped[a["idx"]])
+            continue
         fb = by_index.get(a["idx"])
         if fb is None:
             continue

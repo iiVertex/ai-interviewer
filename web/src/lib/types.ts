@@ -5,6 +5,7 @@ export type SessionConfig = {
   seniority?: 'intern' | 'junior' | 'mid' | 'senior'
   job_description?: string
   student_type?: 'internship' | 'college' | 'scholarship'
+  source?: 'bank'
 }
 
 export type Question = { id: string; text: string }
@@ -70,6 +71,17 @@ export type AnswerRow = {
   metrics: Record<string, number | null>
   scores: Scores
   timeline: { eye_contact: (number | null)[]; speaking: (number | null)[] } | null
+}
+
+export type SavedQuestion = {
+  id: string
+  text: string
+  mode: Mode
+  role: string | null
+  session_id: string | null
+  answer_idx: number | null
+  score: number | null
+  created_at: string
 }
 
 export type Me = { id: string; email: string | null; consented: boolean; daily_limit: number; used_today: number }

@@ -31,6 +31,7 @@ app = FastAPI(title="Interview Coach API")
 QUESTIONS_PER_SESSION = 5
 MAX_AUDIO_BYTES = 4_000_000  # Vercel caps request bodies at 4.5 MB
 MAX_SIGNAL_BYTES = 3_000_000
+MIN_ANSWER_S = 1.5
 
 
 class SessionConfig(BaseModel):
@@ -43,6 +44,8 @@ class SessionConfig(BaseModel):
 class CreateSession(BaseModel):
     mode: Literal["job", "student", "communication"]
     config: SessionConfig = SessionConfig()
+    # Practice-bank rows to ask instead of fresh questions
+    saved_ids: list[str] | None = Field(default=None, min_length=1, max_length=QUESTIONS_PER_SESSION)
 
 
 # The consent notice changed on this date (answer videos are now stored for replay), so
@@ -117,6 +120,17 @@ def create_session(body: CreateSession, user: User = Depends(current_user), db: 
         raise HTTPException(429, f"You've reached your limit of {profile['daily_session_limit']} sessions in 24 hours")
 
     config = body.config.model_dump(exclude_none=True)
+    if body.saved_ids:
+        rows = db.table("saved_questions").select("*").eq("user_id", user.id).in_("id", body.saved_ids).execute().data
+        if len(rows) != len(set(body.saved_ids)):
+            raise HTTPException(404, "Some of those saved questions no longer exist")
+        order = {sid: i for i, sid in enumerate(body.saved_ids)}
+        rows.sort(key=lambda r: order[r["id"]])
+        questions = [{"id": f"saved-{r['id']}", "text": r["text"]} for r in rows]
+        role = next((r["role"] for r in rows if r.get("role")), None)
+        config = {"source": "bank", **({"role": role} if role else {})}
+        return _insert_session(db, user, body.mode, config, questions)
+
     questions = pick_questions(body.mode, config, QUESTIONS_PER_SESSION)
     settings = get_settings()
     if body.mode == "job" and settings.enable_jd_questions and (config.get("role") or config.get("job_description")):
@@ -125,10 +139,13 @@ def create_session(body: CreateSession, user: User = Depends(current_user), db: 
             questions = [{"id": f"gen-{i + 1}", "text": q} for i, q in enumerate(generated)]
         except Exception:
             log.exception("question generation failed; using the bank")
+    return _insert_session(db, user, body.mode, config, questions)
 
+
+def _insert_session(db: Client, user: User, mode: str, config: dict, questions: list[dict]) -> dict:
     row = db.table("sessions").insert({
         "user_id": user.id,
-        "mode": body.mode,
+        "mode": mode,
         "config": config,
         "questions": questions,
         "status": "created",
@@ -191,8 +208,11 @@ def upload_answer(
         f"{user.id}/{sid}/answer-{idx}.json", signal_bytes, {"content-type": "application/json", "upsert": "true"}
     )
 
-    transcript = {"text": "", "words": [], "word_timestamps": False}
-    if len(audio_bytes) > 2000:  # anything smaller is silence or a broken recording
+    empty = {"text": "", "words": [], "word_timestamps": False}
+    transcript = empty
+    duration = float(signal_data.get("duration_s") or 0)
+    # A tiny file is silence or a broken recording, and a clip this short is a skipped question.
+    if len(audio_bytes) > 2000 and duration >= MIN_ANSWER_S:
         mime = (audio.content_type or "audio/webm").split(";")[0]
         ext = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "mp4", "audio/wav": "wav"}.get(mime, "webm")
         try:
@@ -200,6 +220,9 @@ def upload_answer(
         except Exception as e:
             log.exception("transcription failed")
             raise HTTPException(502, f"Transcription failed: {e}")
+        if not ai.plausible(transcript, duration):
+            log.warning("discarding a hallucinated transcript for %s/%s", sid, idx)
+            transcript = empty
 
     result = analyze_answer(idx, signal_data, transcript["words"], transcript["text"])
     db.table("session_answers").upsert({

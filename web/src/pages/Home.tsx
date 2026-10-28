@@ -80,7 +80,7 @@ export default function Home() {
                   <Link to={`/report/${s.id}`} className="history__row">
                     <span className={`score-pill score-pill--${scoreTone(overall)}`}>{overall ?? '–'}</span>
                     <span className="history__main">
-                      <strong>{MODE_LABELS[s.mode]}</strong>
+                      <strong>{s.config.source === 'bank' ? `Practice bank · ${MODE_LABELS[s.mode]}` : MODE_LABELS[s.mode]}</strong>
                       <span className="muted">
                         {s.config.role ? `${s.config.role} · ` : ''}
                         {new Date(s.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}

@@ -16,6 +16,7 @@ export function Layout({ children, wide = false }: { children: ReactNode; wide?:
         {session && (
           <nav className="topbar__links" aria-label="Main">
             <NavLink to="/" end className="topbar__link">Sessions</NavLink>
+            <NavLink to="/bank" className="topbar__link">Practice bank</NavLink>
             <button className="topbar__link" onClick={signOut}>Sign out</button>
           </nav>
         )}

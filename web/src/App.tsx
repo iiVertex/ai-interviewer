@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { useAuth } from './lib/auth'
 import { supabaseConfigured } from './lib/supabase'
+import Bank from './pages/Bank'
 import Consent from './pages/Consent'
 import Home from './pages/Home'
 import Landing from './pages/Landing'
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/" element={loading ? fallback : session ? <Home /> : <Landing />} />
         <Route path="/consent" element={<RequireAuth><Consent /></RequireAuth>} />
         <Route path="/new" element={<RequireAuth><NewSession /></RequireAuth>} />
+        <Route path="/bank" element={<RequireAuth><Bank /></RequireAuth>} />
         <Route path="/session/:id" element={<RequireAuth><Interview /></RequireAuth>} />
         <Route path="/report/:id" element={<RequireAuth><Report /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />

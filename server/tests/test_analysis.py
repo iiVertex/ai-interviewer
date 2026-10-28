@@ -50,7 +50,7 @@ def make_words(duration=60.0, silence=(12, 17), fillers_at=(5.0, 6.0, 7.0)):
         if silence[0] <= t < silence[1]:
             t = silence[1]
             continue
-        words.append({"word": "word", "start": t, "end": t + 0.3})
+        words.append({"word": f"word{len(words)}", "start": t, "end": t + 0.3})
         t += 0.4  # 150 words per minute
     for ft in fillers_at:
         words.append({"word": "um", "start": ft + 0.05, "end": ft + 0.15})

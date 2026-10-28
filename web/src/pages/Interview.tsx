@@ -74,6 +74,7 @@ export default function Interview() {
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [steps, setSteps] = useState<Record<StepKey, StepState>>({ upload: 'pending', analyze: 'pending', screens: 'pending', video: 'pending', score: 'pending' })
   const [processError, setProcessError] = useState<string | null>(null)
+  const [recap, setRecap] = useState<{ idx: number; seconds: number; answered: boolean }[]>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -371,6 +372,8 @@ export default function Interview() {
 
   const finishSession = async () => {
     releaseCamera()
+    // What was recorded, for the wrap-up screen. Clips under 1.5s are skipped questions (the server agrees).
+    setRecap([...uploads.current].map(([i, up]) => ({ idx: i, seconds: up.payload.duration_s, answered: up.payload.duration_s >= 1.5 })))
     setPhase('processing')
     await runProcessing()
   }
@@ -380,6 +383,7 @@ export default function Interview() {
   const orbState: OrbState =
     phase !== 'interview' ? 'idle' : stage === 'speaking' ? 'speaking' : stage === 'answering' ? 'listening' : 'thinking'
   const allGood = checks.face && checks.centered && checks.distance === 'ok' && checks.light
+  const talkTime = recap.reduce((sum, r) => sum + (r.answered ? r.seconds : 0), 0)
 
   return (
     <div className={`room room--${phase}`}>
@@ -486,20 +490,42 @@ export default function Interview() {
       )}
 
       {phase === 'processing' && (
-        <div className="room__panel card processing">
-          <h2>Building your report</h2>
-          <ol className="steps">
-            {STEPS.map(([key, label]) => (
-              <li key={key} className={`step step--${steps[key]}`}>{label}</li>
-            ))}
-          </ol>
-          {processError && (
-            <>
-              <p className="error">{processError}</p>
-              <button className="btn btn--primary" onClick={runProcessing}>Try again</button>
-            </>
-          )}
-          <p className="muted small">Don't close this tab until your report opens.</p>
+        <div className="wrapup">
+          <section className="wrapup__recap">
+            <p className="eyebrow">Session complete</p>
+            <h1>That's a wrap.</h1>
+            <p className="lead">
+              You answered {recap.filter((r) => r.answered).length} of {qs.length} questions
+              {talkTime > 0 && <> · {formatTime(talkTime)} of talking</>}.
+            </p>
+            <ol className="recap">
+              {qs.map((q, i) => {
+                const r = recap.find((x) => x.idx === i)
+                return (
+                  <li key={q.id}>
+                    <span className="recap__num">Q{i + 1}</span>
+                    <span className="recap__text">{q.text}</span>
+                    <span className="recap__time">{!r ? 'Not reached' : r.answered ? formatTime(r.seconds) : 'Skipped'}</span>
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+          <div className="card processing">
+            <h2>Building your report</h2>
+            <ol className="steps">
+              {STEPS.map(([key, label]) => (
+                <li key={key} className={`step step--${steps[key]}`}>{label}</li>
+              ))}
+            </ol>
+            {processError && (
+              <>
+                <p className="error">{processError}</p>
+                <button className="btn btn--primary" onClick={runProcessing}>Try again</button>
+              </>
+            )}
+            <p className="muted small">Don't close this tab until your report opens.</p>
+          </div>
         </div>
       )}
     </div>

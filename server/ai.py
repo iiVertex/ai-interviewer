@@ -60,6 +60,14 @@ def transcribe(audio: bytes, filename: str, mime: str) -> dict:
     return {"text": (r.text or "").strip(), "words": words, "word_timestamps": exact}
 
 
+def plausible(transcript: dict, duration_s: float) -> bool:
+    """Whisper invents speech for silent clips, often by repeating its own prompt. Catch the obvious cases."""
+    words = [w["word"].strip(",.?!").lower() for w in transcript["words"]]
+    if duration_s > 0 and len(words) > 6 * duration_s:  # faster than anyone talks
+        return False
+    return len(words) < 20 or len(set(words)) / len(words) >= 0.15  # the same few words over and over
+
+
 def synthesize(text: str) -> bytes:
     s = get_settings()
     r = openai_client().audio.speech.create(

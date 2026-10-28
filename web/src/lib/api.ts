@@ -31,10 +31,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   me: () => request<Me>('/api/me'),
   consent: () => request<{ ok: true }>('/api/consent', { method: 'POST' }),
-  createSession: (mode: Mode, config: SessionConfig) =>
+  createSession: (mode: Mode, config: SessionConfig, savedIds?: string[]) =>
     request<{ id: string; questions: Question[] }>('/api/sessions', {
       method: 'POST',
-      body: JSON.stringify({ mode, config }),
+      body: JSON.stringify({ mode, config, saved_ids: savedIds }),
     }),
   questionAudio: (sid: string, idx: number) =>
     request<{ url: string; text: string }>(`/api/sessions/${sid}/questions/${idx}/audio`, { method: 'POST' }),
