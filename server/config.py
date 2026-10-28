@@ -48,7 +48,7 @@ def get_settings() -> Settings:
         stt_model=os.environ.get("STT_MODEL", "whisper-1"),
         tts_model=os.environ.get("TTS_MODEL", "gpt-4o-mini-tts"),
         tts_voice=os.environ.get("TTS_VOICE", "alloy"),
-        content_model=os.environ.get("CONTENT_MODEL", "claude-sonnet-5-5"),
+        content_model=os.environ.get("CONTENT_MODEL", "claude-haiku-5-5"),
         question_model=os.environ.get("QUESTION_MODEL", "claude-haiku-5-5"),
         enable_jd_questions=_flag("ENABLE_JD_QUESTIONS", False),
         default_daily_limit=int(os.environ.get("DEFAULT_DAILY_LIMIT", "5")),

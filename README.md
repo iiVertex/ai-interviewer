@@ -5,7 +5,7 @@ Practice interviews with an AI interviewer. Computer vision runs in the browser 
 - **Modes:** job interview (role, seniority, optional job description), student (internship / college / scholarship), communication practice
 - **Session:** setup check, 3-second gaze calibration, 5 spoken questions, about 10 s of thinking time, up to 2 min per answer
 - **Signals:** eye contact, facial expressiveness, head stability, posture, fidgeting, framing, plus speaking pace, filler words and pauses
-- **Privacy:** raw video never leaves the browser. The server stores transcripts, scores, the measured signal numbers and flag screenshots.
+- **Privacy:** face and posture analysis runs in the browser and no AI sees video. Each answer's video is uploaded to the private `recordings` bucket (owner-only) for replay; the server also stores transcripts, scores, the measured signal numbers and flag screenshots. Deleting a session deletes all of it.
 
 ## How it fits together
 
@@ -24,9 +24,9 @@ After the last answer the browser drives the pipeline:
 
 1. `POST /api/sessions/{id}/answers/{i}`: audio and signals for each answer (uploaded as soon as the answer ends). The server transcribes the audio with `whisper-1` and analyzes the answer.
 2. `POST /api/sessions/{id}/analyze`: picks at most 8 flags and 2 highlights and computes the scores.
-3. The browser uploads screenshots for the flags that need one, taken from thumbnails it kept in memory. At the same time it calls `POST /api/sessions/{id}/score`, which makes one `claude-sonnet-5-5` call for content feedback.
+3. The browser uploads screenshots for the flags that need one, taken from thumbnails it kept in memory. At the same time it calls `POST /api/sessions/{id}/score`, which makes one `claude-haiku-5-5` call for content feedback (set `CONTENT_MODEL=claude-sonnet-5-5` for the pricier model).
 
-AI cost per session is roughly 5 to 10 cents (Whisper plus one Sonnet call; question audio is cached in storage, so each question is voiced only once).
+AI cost per session is Whisper plus one Haiku call; question audio is cached in storage, so each question is voiced only once.
 
 ## Setup
 
@@ -47,8 +47,8 @@ cp web/.env.example web/.env.local # browser: Supabase URL + anon key
 # backend (from the repo root)
 python -m venv .venv
 .venv/Scripts/activate            # Windows; on macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt pytest uvicorn
-uvicorn server.main:app --reload --port 8000
+pip install -r requirements.txt pytest "uvicorn[standard]"
+uvicorn server.main:app --reload --reload-include .env --port 8000
 
 # frontend (second terminal)
 cd web

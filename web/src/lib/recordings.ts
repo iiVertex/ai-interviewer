@@ -1,5 +1,5 @@
-// Recordings live only in this tab's memory: video never leaves the user's computer.
-// The report page uses them for replay right after a session; after a reload they're gone.
+// This tab's copy of each answer's recording, for instant replay and screenshots right after a session.
+// The interview also uploads each video to the private `recordings` bucket, which the report falls back to.
 
 export type Thumbnail = { t: number; blob: Blob }
 

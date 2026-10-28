@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { LevelMeter } from '../audio/level'
 import { speak, type Speech } from '../audio/voice'
 import { toWav } from '../audio/wav'
+import { BrandMark } from '../components/BrandMark'
 import { VoiceOrb, type OrbState } from '../components/VoiceOrb'
 import { api } from '../lib/api'
 import { formatTime } from '../lib/format'
@@ -26,6 +27,7 @@ const STEPS = [
   ['upload', 'Uploading your answers'],
   ['analyze', 'Finding your key moments'],
   ['screens', 'Saving screenshots'],
+  ['video', 'Saving your replays'],
   ['score', 'Reviewing what you said'],
 ] as const
 type StepKey = (typeof STEPS)[number][0]
@@ -70,7 +72,7 @@ export default function Interview() {
   const [idx, setIdx] = useState(0)
   const [stage, setStage] = useState<Stage>('speaking')
   const [secondsLeft, setSecondsLeft] = useState(0)
-  const [steps, setSteps] = useState<Record<StepKey, StepState>>({ upload: 'pending', analyze: 'pending', screens: 'pending', score: 'pending' })
+  const [steps, setSteps] = useState<Record<StepKey, StepState>>({ upload: 'pending', analyze: 'pending', screens: 'pending', video: 'pending', score: 'pending' })
   const [processError, setProcessError] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -83,6 +85,7 @@ export default function Interview() {
   const speechRef = useRef<Speech | null>(null)
   const audioUrls = useRef(new Map<number, Promise<string | null>>())
   const uploads = useRef(new Map<number, PendingUpload>())
+  const videoUploads = useRef(new Map<number, Promise<void>>())
   const timerRef = useRef<number | null>(null)
   const answerRef = useRef<{ finish: () => void } | null>(null)
   const questionsRef = useRef<Question[] | null>(questions)
@@ -252,7 +255,7 @@ export default function Interview() {
     setStage('answering')
     setSecondsLeft(ANSWER_SECONDS)
 
-    const videoRec = startRecorder(stream, pickMime(['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']), { video: 1_200_000, audio: 64_000 })
+    const videoRec = startRecorder(stream, pickMime(['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']), { video: 500_000, audio: 64_000 })
     const audioRec = startRecorder(new MediaStream(stream.getAudioTracks()), pickMime(['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']), { audio: 32_000 })
     const started = performance.now()
     const signals = new SignalRecorder(video, calibrationRef.current, started)
@@ -275,6 +278,19 @@ export default function Interview() {
       const audioBlob = await toWav(recorded).catch(() => recorded) // an empty clip can't be decoded; the server skips it
       const { payload, thumbnails } = signals.finish(ended)
       saveRecording(sid, i, videoBlob, thumbnails)
+      if (videoBlob.size) {
+        // Upload the replay in the background while the interview carries on.
+        const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm'
+        videoUploads.current.set(
+          i,
+          supabase.storage
+            .from('recordings')
+            .upload(`${session!.user.id}/${sid}/${i}.${ext}`, videoBlob, { contentType: `video/${ext}`, upsert: true })
+            .then(({ error }) => {
+              if (error) throw error
+            }),
+        )
+      }
       const pending: PendingUpload = { audio: audioBlob, payload, promise: null, done: false }
       pending.promise = api.uploadAnswer(sid, i, audioBlob, payload).then(() => (pending.done = true)).catch(() => {})
       uploads.current.set(i, pending)
@@ -340,7 +356,12 @@ export default function Interview() {
           }),
       ).then(() => mark('screens', 'done'))
       const scoring = api.score(sid).then(() => mark('score', 'done'))
-      await Promise.all([screenshots, scoring])
+      // A replay that fails to upload still plays in this tab, so it never blocks the report.
+      mark('video', 'active')
+      const replays = Promise.allSettled(videoUploads.current.values()).then((r) =>
+        mark('video', r.some((x) => x.status === 'rejected') ? 'failed' : 'done'),
+      )
+      await Promise.all([screenshots, scoring, replays])
       navigate(`/report/${sid}`, { replace: true })
     } catch (e) {
       mark(current, 'failed')
@@ -363,7 +384,10 @@ export default function Interview() {
   return (
     <div className={`room room--${phase}`}>
       <header className="room__bar">
-        <span className="brand brand--small">Interview Coach</span>
+        <span className="brand brand--small">
+          <BrandMark size={18} />
+          <span>Interview Coach</span>
+        </span>
         {phase === 'interview' && (
           <>
             <span className="room__progress" aria-live="polite">Question {idx + 1} of {qs.length}</span>
@@ -379,7 +403,7 @@ export default function Interview() {
         </section>
       )}
 
-      <div className="room__stage">
+      <div className={`room__stage${phase === 'setup' ? ' room__stage--setup' : ''}`}>
         {phase === 'interview' && <VoiceOrb levelRef={levelRef} state={orbState} />}
         <div className={`selfview selfview--${phase === 'interview' ? 'small' : 'large'}`}>
           <video ref={videoRef} muted playsInline className="mirror" />
@@ -390,6 +414,30 @@ export default function Interview() {
           )}
           {phase === 'interview' && stage === 'answering' && <span className="rec-dot">REC</span>}
         </div>
+
+        {phase === 'setup' && (
+          <div className="room__panel card setup">
+            <h2>Camera check</h2>
+            <ul className="checks">
+              <li className={checks.face ? 'ok' : ''}>Your face is visible</li>
+              <li className={checks.centered ? 'ok' : ''}>You're centered in the frame</li>
+              <li className={checks.distance === 'ok' ? 'ok' : ''}>
+                {checks.distance === 'far' ? 'Move a little closer' : checks.distance === 'close' ? 'Sit back a little' : 'Good distance from the camera'}
+              </li>
+              <li className={checks.light ? 'ok' : ''}>{checks.light ? 'Lighting looks good' : 'Find more light on your face'}</li>
+              <li className={checks.mic ? 'ok' : ''}>{checks.mic ? 'Microphone is working' : 'Say something to test your mic'}</li>
+            </ul>
+            {calibrationNote && <p className="error">{calibrationNote}</p>}
+            <p className="muted small">
+              Next, look straight at your camera lens for 3 seconds so we learn what eye contact looks like on your setup.
+            </p>
+            <div className="actions">
+              <button className="btn btn--primary btn--lg" onClick={startCalibration}>
+                {allGood ? "I'm ready" : 'Continue anyway'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {phase === 'loading' && (
@@ -404,30 +452,6 @@ export default function Interview() {
           <h2>We couldn't start the session</h2>
           <p className="error">{error}</p>
           <button className="btn btn--primary" onClick={() => window.location.reload()}>Try again</button>
-        </div>
-      )}
-
-      {phase === 'setup' && (
-        <div className="room__panel card setup">
-          <h2>Camera check</h2>
-          <ul className="checks">
-            <li className={checks.face ? 'ok' : ''}>Your face is visible</li>
-            <li className={checks.centered ? 'ok' : ''}>You're centered in the frame</li>
-            <li className={checks.distance === 'ok' ? 'ok' : ''}>
-              {checks.distance === 'far' ? 'Move a little closer' : checks.distance === 'close' ? 'Sit back a little' : 'Good distance from the camera'}
-            </li>
-            <li className={checks.light ? 'ok' : ''}>{checks.light ? 'Lighting looks good' : 'Find more light on your face'}</li>
-            <li className={checks.mic ? 'ok' : ''}>{checks.mic ? 'Microphone is working' : 'Say something to test your mic'}</li>
-          </ul>
-          {calibrationNote && <p className="error">{calibrationNote}</p>}
-          <p className="muted small">
-            Next, look straight at your camera lens for 3 seconds so we learn what eye contact looks like on your setup.
-          </p>
-          <div className="actions">
-            <button className="btn btn--primary btn--lg" onClick={startCalibration}>
-              {allGood ? "I'm ready" : 'Continue anyway'}
-            </button>
-          </div>
         </div>
       )}
 
@@ -475,7 +499,7 @@ export default function Interview() {
               <button className="btn btn--primary" onClick={runProcessing}>Try again</button>
             </>
           )}
-          <p className="muted small">Your video stays in this tab. Don't close it until your report opens.</p>
+          <p className="muted small">Don't close this tab until your report opens.</p>
         </div>
       )}
     </div>

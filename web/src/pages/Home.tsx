@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { api } from '../lib/api'
 import { scoreTone } from '../lib/format'
+import { forgetRecordings } from '../lib/recordings'
 import { supabase } from '../lib/supabase'
 import { MODE_LABELS, type Me, type SessionRow } from '../lib/types'
 
@@ -13,6 +14,7 @@ export default function Home() {
   const [me, setMe] = useState<Me | null>(null)
   const [history, setHistory] = useState<HistoryRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
     api.me().then(setMe).catch((e) => setError(e.message))
@@ -30,10 +32,25 @@ export default function Home() {
   const left = me ? Math.max(0, me.daily_limit - me.used_today) : null
   const start = () => navigate(me && !me.consented ? '/consent' : '/new')
 
+  const remove = async (sid: string) => {
+    if (!window.confirm('Delete this session and everything saved for it? This cannot be undone.')) return
+    setDeleting(sid)
+    try {
+      await api.deleteSession(sid)
+      forgetRecordings(sid)
+      setHistory((h) => h && h.filter((s) => s.id !== sid))
+      api.me().then(setMe).catch(() => {})
+    } catch (e) {
+      setError((e as Error).message)
+    }
+    setDeleting(null)
+  }
+
   return (
     <Layout>
       <section className="home-head">
         <div>
+          <p className="eyebrow">Dashboard</p>
           <h1>Ready to practice?</h1>
           <p className="muted">
             {left === null ? ' ' : `${left} of ${me!.daily_limit} sessions left in the next 24 hours.`}
@@ -47,7 +64,7 @@ export default function Home() {
       {error && <p className="error">{error}</p>}
 
       <section>
-        <h2>Your sessions</h2>
+        <h2 className="section-label">Your sessions</h2>
         {history === null ? (
           <div className="spinner" />
         ) : history.length === 0 ? (
@@ -69,8 +86,16 @@ export default function Home() {
                         {new Date(s.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                       </span>
                     </span>
-                    <span className={`status status--${s.status}`}>{s.status === 'ready' ? 'Report ready' : s.status === 'created' ? 'Unfinished' : 'Processing'}</span>
+                    <span className={`status status--${s.status === 'ready' ? 'ready' : 'pending'}`}>{s.status === 'ready' ? 'Report ready' : s.status === 'created' ? 'Unfinished' : 'Processing'}</span>
                   </Link>
+                  <button
+                    className="btn btn--danger btn--sm history__delete"
+                    onClick={() => remove(s.id)}
+                    disabled={deleting === s.id}
+                    aria-label={`Delete ${MODE_LABELS[s.mode]} session`}
+                  >
+                    {deleting === s.id ? 'Deleting…' : 'Delete'}
+                  </button>
                 </li>
               )
             })}

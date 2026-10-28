@@ -42,14 +42,16 @@ export default function NewSession() {
   return (
     <Layout>
       <form className="new-session" onSubmit={submit}>
-        <h1>New practice session</h1>
+        <p className="eyebrow">New session</p>
+        <h1>What are you practicing for?</h1>
         <p className="muted">5 questions · up to 2 minutes per answer · about 15 minutes in total</p>
 
         <fieldset className="mode-grid">
           <legend className="sr-only">Session type</legend>
-          {MODES.map(({ mode: m, blurb }) => (
+          {MODES.map(({ mode: m, blurb }, i) => (
             <label key={m} className={`mode-card ${mode === m ? 'mode-card--active' : ''}`}>
               <input type="radio" name="mode" value={m} checked={mode === m} onChange={() => setMode(m)} />
+              <span className="mode-card__num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
               <strong>{MODE_LABELS[m]}</strong>
               <span>{blurb}</span>
             </label>

@@ -45,6 +45,16 @@ class CreateSession(BaseModel):
     config: SessionConfig = SessionConfig()
 
 
+# The consent notice changed on this date (answer videos are now stored for replay), so
+# anyone who accepted the earlier version is asked again.
+CONSENT_UPDATED = datetime(2026, 10, 24, tzinfo=timezone.utc)
+
+
+def _consented(profile: dict) -> bool:
+    at = profile.get("consented_at")
+    return at is not None and datetime.fromisoformat(at) >= CONSENT_UPDATED
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -85,7 +95,7 @@ def me(user: User = Depends(current_user), db: Client = Depends(get_db)) -> dict
     return {
         "id": user.id,
         "email": user.email,
-        "consented": profile.get("consented_at") is not None,
+        "consented": _consented(profile),
         "daily_limit": profile["daily_session_limit"],
         "used_today": _used_last_day(db, user),
     }
@@ -101,7 +111,7 @@ def consent(user: User = Depends(current_user), db: Client = Depends(get_db)) ->
 @app.post("/api/sessions")
 def create_session(body: CreateSession, user: User = Depends(current_user), db: Client = Depends(get_db)) -> dict:
     profile = _profile(db, user)
-    if not profile.get("consented_at"):
+    if not _consented(profile):
         raise HTTPException(403, "Please accept the consent notice first")
     if _used_last_day(db, user) >= profile["daily_session_limit"]:
         raise HTTPException(429, f"You've reached your limit of {profile['daily_session_limit']} sessions in 24 hours")
@@ -258,7 +268,7 @@ def score_session(sid: str, user: User = Depends(current_user), db: Client = Dep
 @app.delete("/api/sessions/{sid}")
 def delete_session(sid: str, user: User = Depends(current_user), db: Client = Depends(get_db)) -> dict:
     _session(db, user, sid)
-    for bucket in ("screenshots", "signals"):
+    for bucket in ("screenshots", "signals", "recordings"):
         folder = f"{user.id}/{sid}"
         files = db.storage.from_(bucket).list(folder)
         paths = [f"{folder}/{f['name']}" for f in files if f.get("name")]

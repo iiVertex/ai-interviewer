@@ -23,13 +23,15 @@ export default function Consent() {
   return (
     <Layout>
       <div className="card consent">
+        <p className="eyebrow">Privacy</p>
         <h1>Before your first session</h1>
         <p className="lead">Here's what happens to your camera and microphone data.</p>
         <ul className="checklist">
-          <li><strong>Your video never leaves your computer.</strong> Face and posture analysis runs in your browser while you record.</li>
+          <li><strong>Face and posture analysis runs in your browser</strong> while you record. No AI ever sees your video.</li>
+          <li><strong>Your recordings are saved privately</strong> so you can replay your answers later. Only you can see them.</li>
           <li><strong>Your voice is transcribed.</strong> Each answer's audio is sent to a speech-to-text service, then discarded.</li>
           <li><strong>An AI reviews your answers.</strong> Only the transcripts (not audio or video) are sent to an AI model for feedback.</li>
-          <li><strong>What we save:</strong> transcripts, scores, the measured signals and a few screenshots of flagged moments.</li>
+          <li><strong>What we save:</strong> your answer recordings, transcripts, scores, the measured signals and a few screenshots of flagged moments.</li>
           <li><strong>You're in control.</strong> Delete any session at any time and everything saved for it goes with it.</li>
         </ul>
         {error && <p className="error">{error}</p>}

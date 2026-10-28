@@ -22,7 +22,7 @@ import {
 const CATEGORIES: Category[] = ['eye_contact', 'expressiveness', 'composure', 'delivery', 'content']
 const PAUSE_MARK_S = 3
 
-/** Video from this tab's memory, with a fix for MediaRecorder files that report no duration. */
+/** An answer's replay, with a fix for MediaRecorder files that report no duration. */
 function Replay({ url, seekTo }: { url: string; seekTo: { t: number; n: number } | null }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
@@ -43,7 +43,7 @@ function Replay({ url, seekTo }: { url: string; seekTo: { t: number; n: number }
     v.currentTime = Math.max(0, seekTo.t)
     void v.play().catch(() => {})
   }, [seekTo])
-  return <video ref={ref} src={url} controls playsInline className="replay mirror" />
+  return <video ref={ref} src={url} controls playsInline className="replay" />
 }
 
 function Transcript({ words }: { words: TranscriptWord[] }) {
@@ -102,6 +102,7 @@ export default function Report() {
   const [session, setSession] = useState<SessionRow | null>(null)
   const [answers, setAnswers] = useState<AnswerRow[]>([])
   const [shots, setShots] = useState<Record<string, string>>({})
+  const [videos, setVideos] = useState<Record<number, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
   const [seek, setSeek] = useState<Record<number, { t: number; n: number }>>({})
@@ -150,6 +151,20 @@ export default function Report() {
       })
   }, [session, sid])
 
+  // Replays saved to storage, named by answer index: {user_id}/{session_id}/{idx}.webm
+  useEffect(() => {
+    if (!session) return
+    const folder = `${session.user_id}/${sid}`
+    const bucket = supabase.storage.from('recordings')
+    bucket.list(folder).then(async ({ data: files }) => {
+      if (!files?.length) return
+      const { data } = await bucket.createSignedUrls(files.map((f) => `${folder}/${f.name}`), 3600)
+      const map: Record<number, string> = {}
+      data?.forEach((d, i) => d.signedUrl && (map[parseInt(files[i].name, 10)] = d.signedUrl))
+      setVideos(map)
+    })
+  }, [session, sid])
+
   const feedbackByIdx = useMemo(() => {
     const m = new Map<number, AnswerFeedback>()
     session?.content?.answers.forEach((fb) => m.set(fb.index, fb))
@@ -184,13 +199,16 @@ export default function Report() {
   const highlights = flags.filter((f) => f.kind === 'highlight')
   const durations = session.questions.map((_, i) => answers.find((a) => a.idx === i)?.duration_s ?? 0)
 
+  // This tab's own copy plays instantly; otherwise fall back to the saved one.
+  const replayUrl = (i: number) => getRecording(sid, i)?.videoUrl ?? videos[i]
+
   const replay = (flag: Flag) => {
     document.getElementById(`answer-${flag.answer_idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setSeek((s) => ({ ...s, [flag.answer_idx]: { t: flag.start_s - 1, n: (s[flag.answer_idx]?.n ?? 0) + 1 } }))
   }
   const select = (flag: Flag) => {
     document.getElementById(`flag-${flag.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    if (getRecording(sid, flag.answer_idx)) replay(flag)
+    if (replayUrl(flag.answer_idx)) replay(flag)
   }
 
   const retryFeedback = async () => {
@@ -266,7 +284,7 @@ export default function Report() {
         ) : (
           <div className="flag-grid">
             {issues.map((f) => (
-              <FlagCard key={f.id} flag={f} screenshotUrl={shots[f.id]} onReplay={getRecording(sid, f.answer_idx) ? () => replay(f) : undefined} />
+              <FlagCard key={f.id} flag={f} screenshotUrl={shots[f.id]} onReplay={replayUrl(f.answer_idx) ? () => replay(f) : undefined} />
             ))}
           </div>
         )}
@@ -275,7 +293,7 @@ export default function Report() {
             <h2>Your strongest moments</h2>
             <div className="flag-grid">
               {highlights.map((f) => (
-                <FlagCard key={f.id} flag={f} screenshotUrl={shots[f.id]} onReplay={getRecording(sid, f.answer_idx) ? () => replay(f) : undefined} />
+                <FlagCard key={f.id} flag={f} screenshotUrl={shots[f.id]} onReplay={replayUrl(f.answer_idx) ? () => replay(f) : undefined} />
               ))}
             </div>
           </>
@@ -287,7 +305,7 @@ export default function Report() {
         {session.questions.map((q, i) => {
           const a = answers.find((x) => x.idx === i)
           const fb = feedbackByIdx.get(i)
-          const rec = getRecording(sid, i)
+          const recUrl = replayUrl(i)
           const m = a?.metrics ?? {}
           return (
             <article key={q.id} id={`answer-${i}`} className="card answer">
@@ -313,10 +331,10 @@ export default function Report() {
                     <Transcript words={a.transcript?.words ?? []} />
                     {fb && <ContentFeedback fb={fb} />}
                   </div>
-                  {rec && (
+                  {recUrl && (
                     <aside className="answer__replay">
-                      <Replay url={rec.videoUrl} seekTo={seek[i] ?? null} />
-                      <p className="muted small">Replay is available until you close this tab.</p>
+                      <Replay url={recUrl} seekTo={seek[i] ?? null} />
+                      <p className="muted small">Only you can see this recording.</p>
                     </aside>
                   )}
                 </div>
