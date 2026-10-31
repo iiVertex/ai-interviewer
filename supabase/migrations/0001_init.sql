@@ -1,4 +1,4 @@
--- Interview Coach schema. Run once in the Supabase SQL editor (or `supabase db push`).
+-- Kemo AI schema. Run once in the Supabase SQL editor (or `supabase db push`).
 -- The FastAPI server writes with the service-role key; the browser only reads its own rows
 -- and uploads its own flag screenshots.
 

@@ -196,7 +196,7 @@ export default function Landing() {
         <header className="topbar topbar--site">
           <Link to="/" className="brand">
             <BrandMark />
-            <span>Interview Coach</span>
+            <span>Kemo AI</span>
           </Link>
           <nav className="topbar__links" aria-label="Sections">
             <a className="topbar__link" href="#measure">What we measure</a>
@@ -326,7 +326,7 @@ export default function Landing() {
       <footer className="site-footer">
         <span className="brand brand--small">
           <BrandMark size={18} />
-          <span>Interview Coach</span>
+          <span>Kemo AI</span>
         </span>
         <span className="muted">Practice out loud. Only you can see your recordings.</span>
       </footer>

@@ -11,7 +11,7 @@ export function Layout({ children, wide = false }: { children: ReactNode; wide?:
       <header className="topbar">
         <Link to="/" className="brand">
           <BrandMark />
-          <span>Interview Coach</span>
+          <span>Kemo AI</span>
         </Link>
         {session && (
           <nav className="topbar__links" aria-label="Main">

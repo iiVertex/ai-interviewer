@@ -390,7 +390,7 @@ export default function Interview() {
       <header className="room__bar">
         <span className="brand brand--small">
           <BrandMark size={18} />
-          <span>Interview Coach</span>
+          <span>Kemo AI</span>
         </span>
         {phase === 'interview' && (
           <>

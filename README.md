@@ -1,83 +1,113 @@
-# Interview Coach
+# Kemo AI
 
-Practice interviews with an AI interviewer. Computer vision runs in the browser while you answer; afterwards you get a report with scores, a timeline of flagged moments, screenshots of the moments to fix, and feedback on what you said.
+**Practice interviews out loud with an AI interviewer, then see exactly what to fix.**
 
-- **Modes:** job interview (role, seniority, optional job description), student (internship / college / scholarship), communication practice
-- **Session:** setup check, 3-second gaze calibration, 5 spoken questions, about 10 s of thinking time, up to 2 min per answer
-- **Signals:** eye contact, facial expressiveness, head stability, posture, fidgeting, framing, plus speaking pace, filler words and pauses
-- **Privacy:** face and posture analysis runs in the browser and no AI sees video. Each answer's video is uploaded to the private `recordings` bucket (owner-only) for replay; the server also stores transcripts, scores, the measured signal numbers and flag screenshots. Deleting a session deletes all of it.
+Kemo AI asks you real interview questions by voice while your webcam and mic are analyzed in the browser. When you finish, you get a report with scores, a timeline of the moments that went wrong (or right), a screenshot of each one, and a concrete tip to fix it.
 
-## How it fits together
+**Live demo:** https://ai-interviewerrr.vercel.app
+
+## Why
+
+Most people prepare for interviews by reading answers in their head. Then the real interview goes badly because of things they never practiced: looking away, saying "um" constantly, rushing, slouching, or rambling without a clear example. Kemo AI lets you rehearse the way it actually happens and shows you those habits with timestamps and screenshots.
+
+## What it does
+
+- **Three practice modes:** job interview (role, seniority, optional job description), student interview (internship, college, scholarship) and general communication practice.
+- **A spoken interview:** a quick camera check and 3-second gaze calibration, then 5 questions read aloud. You get about 10 seconds to think and up to 2 minutes per answer.
+- **Body language, measured live:** eye contact, facial expressiveness, head stability, posture, fidgeting and framing.
+- **Delivery, from your transcript:** speaking pace, filler words and long pauses.
+- **Answer feedback:** structure, relevance and use of examples, plus a stronger version of your answer.
+- **A report you can come back to:** scores for eye contact, expressiveness, composure, delivery and content; flagged moments on a timeline; replays of each answer.
+- **Practice bank:** save questions from a report and start a new session from them later.
+
+## Privacy
+
+- Face and posture analysis runs **on your device** (MediaPipe in the browser). **No AI ever sees your video.**
+- Only your answer transcripts are sent to the AI for feedback.
+- Answer recordings are stored in a private bucket that only you can access, so you can replay them.
+- Deleting a session deletes its recordings, transcripts, scores and screenshots.
+
+## How it works
+
+1. **In the browser**, MediaPipe tracks your face and pose at 10 fps while you answer. Each answer's audio and signal data are uploaded as soon as it ends.
+2. **The server** transcribes the audio with Whisper (with word timestamps, so fillers and pauses can be placed on the timeline).
+3. **Rule-based analysis** (plain Python, no AI) turns the signals into flags and scores. It keeps the 8 most important flags and 2 highlights.
+4. **One Claude call per session** reviews the transcripts and writes the content feedback.
+
+We kept AI use small on purpose: one Whisper call per answer and one Claude Haiku call per session. Question audio is generated once and cached, so it's reused across sessions.
+
+## Tech stack
+
+| Part | Tech |
+| --- | --- |
+| Frontend | React, TypeScript, Vite, MediaPipe (face + pose) |
+| Backend | Python, FastAPI (runs as one Vercel serverless function) |
+| Database, auth, storage | Supabase (Postgres with row-level security, email sign-in, private storage buckets) |
+| AI (via CometAPI) | `whisper-1` speech-to-text, `gpt-4o-mini-tts` interviewer voice, `claude-haiku-5-5` feedback |
+| Hosting | Vercel (free Hobby plan) |
 
 ```
-web/ (React + Vite + TS)                       server/ (FastAPI, deployed as one Vercel function)
- ├ vision/engine.ts   MediaPipe face + pose     ├ main.py            routes (see the flow below)
- ├ vision/capture.ts  10 fps signal recording   ├ analysis/          rule-based flags + scores (no AI)
- ├ audio/             mic level, interviewer    │   └ thresholds.py  every tunable number
- ├ pages/Interview    the interview room        ├ ai.py              CometAPI: Whisper + TTS (OpenAI SDK), Claude (Anthropic SDK)
- └ pages/Report       the report                ├ content.py         the one Claude scoring call per session
-                                                └ questions.py       placeholder question bank
-supabase/migrations/   tables, row-level security, storage buckets
+web/                  React app
+  src/vision/         MediaPipe face + pose tracking, signal capture
+  src/audio/          mic level, interviewer voice
+  src/pages/          landing, setup, interview room, report, practice bank
+server/               FastAPI app
+  main.py             API routes
+  analysis/           rule-based flags and scores (thresholds.py holds every tunable number)
+  ai.py, content.py   Whisper, TTS and the Claude feedback call
+supabase/migrations/  tables, security policies, storage buckets
 ```
 
-After the last answer the browser drives the pipeline:
+## Run it locally
 
-1. `POST /api/sessions/{id}/answers/{i}`: audio and signals for each answer (uploaded as soon as the answer ends). The server transcribes the audio with `whisper-1` and analyzes the answer.
-2. `POST /api/sessions/{id}/analyze`: picks at most 8 flags and 2 highlights and computes the scores.
-3. The browser uploads screenshots for the flags that need one, taken from thumbnails it kept in memory. At the same time it calls `POST /api/sessions/{id}/score`, which makes one `claude-haiku-5-5` call for content feedback (set `CONTENT_MODEL=claude-sonnet-5-5` for the pricier model).
+You need Python 3.12+, Node 20.19+, a [Supabase](https://supabase.com) project and a [CometAPI](https://www.cometapi.com) key.
 
-AI cost per session is Whisper plus one Haiku call; question audio is cached in storage, so each question is voiced only once.
+**1. Set up Supabase**
+- In the **SQL Editor**, run the files in [`supabase/migrations/`](supabase/migrations/) in order.
+- In **Authentication → Sign In / Providers → Email**, turn off **Confirm email** (Supabase's built-in mailer only sends to your own team).
+- In **Authentication → URL Configuration**, add `http://localhost:5173` to the redirect URLs.
 
-## Setup
-
-### 1. Supabase
-1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, run the files in [`supabase/migrations/`](supabase/migrations/) in order. They create the tables, security policies and the `screenshots`, `signals` and `tts` buckets.
-3. Sign-in is email and password. In **Authentication → Sign In / Providers → Email**, turn off **Confirm email** for now. Supabase's built-in mailer only sends to your project's team members and only a few emails an hour, so other people would never receive the confirmation link. Turn it back on once you set up custom SMTP.
-4. In **Authentication → URL Configuration**, set the Site URL to your deployed URL, and add `http://localhost:5173` to the redirect URLs (used by confirmation links).
-
-### 2. Environment files
+**2. Add your keys**
 ```bash
-cp .env.example .env               # server: Supabase service key + CometAPI key
-cp web/.env.example web/.env.local # browser: Supabase URL + anon key
+cp .env.example .env                # Supabase service key + CometAPI key
+cp web/.env.example web/.env.local  # Supabase URL + anon key
 ```
 
-### 3. Run locally
+**3. Start the backend and frontend**
 ```bash
-# backend (from the repo root)
+# backend, from the repo root
 python -m venv .venv
-.venv/Scripts/activate            # Windows; on macOS/Linux: source .venv/bin/activate
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
 pip install -r requirements.txt pytest "uvicorn[standard]"
-uvicorn server.main:app --reload --reload-include .env --port 8000
+uvicorn server.main:app --reload --port 8000
 
-# frontend (second terminal)
+# frontend, in a second terminal
 cd web
 npm install
-npm run dev                        # http://localhost:5173 (proxies /api to :8000)
+npm run dev                         # open http://localhost:5173
 ```
 
-### 4. Check CometAPI first (do this on day 1)
-```bash
-python -m server.tools.check_comet
-```
-It checks text-to-speech, Whisper word timestamps (and whether filler words survive) and Claude structured output through CometAPI. If word timestamps aren't returned, the pipeline falls back to estimated timings.
+Optional: `python -m server.tools.check_comet` checks that your CometAPI key works for TTS, Whisper and Claude.
+
+## Deploy
+
+1. Import the repo into Vercel. `vercel.json` builds the frontend and `pyproject.toml` points Vercel at the FastAPI app.
+2. Add the variables from `.env.example` and `web/.env.example` in the Vercel project settings.
+3. Add your Vercel URL to Supabase's Site URL and redirect URLs.
 
 ## Tests and tuning
+
 ```bash
-python -m pytest                       # analysis rules + full API flow against an in-memory Supabase
-python -m server.tools.replay SESSION  # re-run the analysis on a recorded session
+python -m pytest                        # analysis rules + the full API flow
+python -m server.tools.replay SESSION   # re-run the analysis on a recorded session
 ```
-The flag thresholds are temporary starting values. Record some sessions, change `server/analysis/thresholds.py`, and replay a session to see how the flags change without recording again. The flag messages and fix tips are in `server/analysis/tips.py`.
 
-## Deploy (Vercel, free Hobby plan)
-1. Import the repo into Vercel. `vercel.json` builds `web/`, and `pyproject.toml` points Vercel at `server.main:app`.
-2. Add the variables from `.env.example` in the Vercel project settings. Vite reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build time.
-3. Add the Vercel URL to Supabase's Site URL and redirect URLs.
+Flag thresholds live in `server/analysis/thresholds.py` and the flag messages and tips in `server/analysis/tips.py`. Change a threshold and replay a session to see the effect without recording again.
 
-Notes:
-- The Hobby plan is for non-commercial use. Switch to Pro if you start charging.
-- Vercel caps request bodies at 4.5 MB, which is why each answer is uploaded separately.
+## Settings
 
-## Switches
-- `ENABLE_JD_QUESTIONS=true`: generates tailored job-interview questions with `claude-haiku-5-5` when a role or job description is given (off for now; the placeholder bank is used).
-- `DEFAULT_DAILY_LIMIT`: sessions per account per 24 hours (default 5). Raise it per person in the `profiles.daily_session_limit` column.
+| Variable | What it does |
+| --- | --- |
+| `DEFAULT_DAILY_LIMIT` | Sessions per account per 24 hours (default 5). Can be raised per user in `profiles.daily_session_limit`. |
+| `ENABLE_JD_QUESTIONS` | Generates questions tailored to the role and job description with Claude (off by default; uses the built-in question bank). |
+| `CONTENT_MODEL` | The feedback model (default `claude-haiku-5-5`; `claude-sonnet-5-5` for higher quality at higher cost). |

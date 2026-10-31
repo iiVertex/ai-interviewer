@@ -24,9 +24,9 @@ from .content import generate_questions, score_content
 from .deps import User, current_user, get_db
 from .questions import pick_questions
 
-log = logging.getLogger("interview-coach")
+log = logging.getLogger("kemo-ai")
 
-app = FastAPI(title="Interview Coach API")
+app = FastAPI(title="Kemo AI API")
 
 QUESTIONS_PER_SESSION = 5
 MAX_AUDIO_BYTES = 4_000_000  # Vercel caps request bodies at 4.5 MB
