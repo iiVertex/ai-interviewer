@@ -4,7 +4,7 @@
 
 Kemo AI asks you real interview questions by voice while your webcam and mic are analyzed in the browser. When you finish, you get a report with scores, a timeline of the moments that went wrong (or right), a screenshot of each one, and a concrete tip to fix it.
 
-**Live demo:** https://ai-interviewerrr.vercel.app
+**Live demo:** https://kemoai.vercel.app/
 
 ## Why
 
